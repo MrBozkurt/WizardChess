@@ -4,18 +4,43 @@ import pyaudio
 import time
 from vosk import Model, KaldiRecognizer
 
-# Chess vocabulary
-pieces = ["pawn", "knight", "bishop", "rook", "queen", "king", "castle"]
-files = ["a", "b", "c", "d", "e", "f", "g", "h"]
-ranks = ["one", "two", "three", "four", "five", "six", "seven", "eight"]
-ranks_map = {
-    "one": "1", "two": "2", "three": "3", "four": "4", 
-    "five": "5", "six": "6", "seven": "7", "eight": "8"
-}
-actions = ["takes", "promotes"]
-filler = ["from", "my", "the", "goes"]
-chess_vocabulary = pieces + files + ranks + actions + filler + ["[unk]"]
-grammar_json = json.dumps(chess_vocabulary)
+def setup():
+    # Chess vocabulary
+    global pieces, files, ranks, ranks_map, actions, filler, chess_vocabulary, grammar_json, recognizer, stream, WAIT_TIME
+    pieces = ["pawn", "knight", "bishop", "rook", "queen", "king", "castle"]
+    files = ["a", "b", "c", "d", "e", "f", "g", "h"]
+    ranks = ["one", "two", "three", "four", "five", "six", "seven", "eight"]
+    ranks_map = {
+        "one": "1", "two": "2", "three": "3", "four": "4", 
+        "five": "5", "six": "6", "seven": "7", "eight": "8"
+    }
+    actions = ["takes", "promotes"]
+    filler = ["from", "my", "the", "goes"]
+    chess_vocabulary = pieces + files + ranks + actions + filler + ["[unk]"]
+    grammar_json = json.dumps(chess_vocabulary)
+
+    # Initialize Vosk model
+    model_path = "vosk-model-small-en-us-0.15"
+    if not os.path.exists(model_path):
+        print("Please download the model and place it in the 'model' directory.")
+        exit(1)
+
+    model = Model(model_path)
+
+    # Bind the grammar to the recognizer
+    recognizer = KaldiRecognizer(model, 16000, grammar_json)
+
+    # Set up Microphone Audio Stream
+    mic = pyaudio.PyAudio()
+    stream = mic.open(
+        format=pyaudio.paInt16, 
+        channels=1, 
+        rate=16000, 
+        input=True, 
+        frames_per_buffer=8192
+    )
+    recognizer.SetWords(True)
+    WAIT_TIME = 0.4
 
 
 def parse(text):
@@ -54,15 +79,14 @@ def parse(text):
         elif (word in files):
             if (i > len(text) - 2 or text[i+1] not in ranks):
                 print("Command not in correct format!")
-                return
+                return False
             else:
                 locations.append(word + ranks_map[text[i+1]])
         
         else:
             if (i == 0 or text[i-1] not in files):
                 print("Command not in correct format!")
-                return
-
+                return False
 
     # Fill the empty variables
     if (len(piece_list) < 1):
@@ -94,36 +118,14 @@ def parse(text):
     
     print("Order: piece, source, destination, target, promotion")
     print(f"{piece} {source} {dest} {target} {promote}\n")
+    return [piece, source, dest, target, promote]
 
 
-
-def main():
-    # Initialize Vosk model
-    model_path = "vosk-model-small-en-us-0.15"
-    if not os.path.exists(model_path):
-        print("Please download the model and place it in the 'model' directory.")
-        exit(1)
-
-    model = Model(model_path)
-
-    # Bind the grammar to the recognizer
-    recognizer = KaldiRecognizer(model, 16000, grammar_json)
-
-    # Set up Microphone Audio Stream
-    mic = pyaudio.PyAudio()
-    stream = mic.open(
-        format=pyaudio.paInt16, 
-        channels=1, 
-        rate=16000, 
-        input=True, 
-        frames_per_buffer=8192
-    )
+def parseSound():
     stream.start_stream()
 
     print("Listening")
 
-    recognizer.SetWords(True)
-    WAIT_TIME = 0.4
     last_speech_time = time.time()
     running_text = ""
 
@@ -163,8 +165,7 @@ def main():
 
         if running_text and (time.time() - last_speech_time > WAIT_TIME):
                 print(f"Validated Chess Command: {text}")
-                parse(text)
                 running_text = ""
-
-if __name__ == "__main__":
-    main()
+                if (parse(text)):
+                    break
+                
