@@ -1,6 +1,12 @@
 import chess
+import chess.svg
 import stt
 import os
+
+import cairosvg
+from PIL import Image, ImageTk
+import io
+import tkinter as tk
 
 
 pieces_map = {
@@ -120,12 +126,42 @@ def piece_to_code(piece):
         else:
             piece = piece[0]
 
+def update_visuals():
+    """Converts the current board state to an image and refreshes the window."""
+    # 1. Generate SVG from python-chess
+    svg_data = chess.svg.board(board=board, size=500)
+    
+    # 2. Convert SVG to PNG bytes
+    png_bytes = cairosvg.svg2png(bytestring=svg_data.encode('utf-8'))
+    
+    # 3. Convert bytes to an image Tkinter can understand
+    pil_image = Image.open(io.BytesIO(png_bytes))
+    tk_image = ImageTk.PhotoImage(pil_image)
+    
+    # 4. Update the label with the new image
+    board_label.configure(image=tk_image)
+    board_label.image = tk_image
+
 def main():
+    global board, board_label
+
+
     stt.setup()
     os.system('cls' if os.name=='nt' else 'clear')
     board = chess.Board()
-
     print(board)
+
+
+    
+    root = tk.Tk()
+    root.title("Python Chess")
+    board_label = tk.Label(root)
+    board_label.pack()
+    svg_data = chess.svg.board(board, size=350)
+    update_visuals()
+
+
+
     print("WHITE" if board.turn else "black")
 
     while True:
@@ -146,6 +182,13 @@ def main():
         if (move):
             if move in board.legal_moves:
                 board.push(move)
+
+
+
+                root.after(0, update_visuals)
+
+
+
             else:
                 print("Not a legal move!")
         
